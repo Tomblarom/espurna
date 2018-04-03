@@ -401,12 +401,11 @@ void _shadow() {
 
     // Use white channel for same RGB
     if (_light_use_white && _light_has_color) {
-        if (_light_channel[0].shadow == _light_channel[1].shadow  && _light_channel[1].shadow == _light_channel[2].shadow ) {
-            _light_channel[3].shadow = _light_channel[0].shadow * ((float) _light_brightness / LIGHT_MAX_BRIGHTNESS);
-            _light_channel[2].shadow = 0;
-            _light_channel[1].shadow = 0;
-            _light_channel[0].shadow = 0;
-        }
+        unsigned int white = std::min(_light_channel[0].shadow, std::min(_light_channel[1].shadow, _light_channel[2].shadow));
+        _light_channel[0].shadow -= white;
+        _light_channel[1].shadow -= white;
+        _light_channel[2].shadow -= white;
+        _light_channel[3].shadow = white;
     }
 
 }
