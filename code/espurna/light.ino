@@ -382,6 +382,7 @@ void _shadow() {
     // Transitions
     unsigned char target;
     for (unsigned int i=0; i < _light_channel.size(); i++) {
+        // Avoid modifying the white channel, we do it after the loop
         if (_light_use_white && _light_has_color && i == 3) {
           continue;
         }
@@ -403,7 +404,7 @@ void _shadow() {
         _light_channel[i].shadow = _light_channel[i].current;
     }
 
-    // Use white channel for same RGB
+    // Calculate the white channel
     if (_light_use_white && _light_has_color) {
         unsigned int white = std::min(_light_channel[0].shadow, std::min(_light_channel[1].shadow, _light_channel[2].shadow));
         _light_channel[0].shadow -= white;
