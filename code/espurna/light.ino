@@ -73,6 +73,24 @@ const unsigned char _light_gamma_table[] = {
 // UTILS
 // -----------------------------------------------------------------------------
 
+unsigned int _getWhite(bool calculate = false) {
+  if (!_light_use_white) return 0;
+  if (calculate) {
+    return std::min(_light_channel[0].value, std::min(_light_channel[1].value, _light_channel[2].value));
+  }
+  return _light_channel[3].value;
+}
+
+void _setWhite() {
+  unsigned int white = _getWhite(true);
+
+  _light_channel[0].value -= white;
+  _light_channel[1].value -= white;
+  _light_channel[2].value -= white;
+  _light_channel[3].value = white;
+}
+
+
 void _fromLong(unsigned long value, bool brightness) {
 
     if (brightness) {
@@ -104,6 +122,9 @@ void _fromRGB(const char * rgb) {
             // RGBA values are interpreted like RGB + brightness
             _fromLong(value, strlen(p) > 7);
 
+            if (_light_use_white) {
+                _setWhite();
+            }
         }
 
     // it's a temperature in mireds
@@ -136,10 +157,14 @@ void _fromRGB(const char * rgb) {
             tok = strtok(NULL, ",");
         }
 
-        // RGB but less than 3 values received
-        if (_light_has_color && (count < 3)) {
+        if (_light_has_color) {
+          // RGB but less than 3 values received
+          if (count < 3) {
             _light_channel[1].value = _light_channel[0].value;
             _light_channel[2].value = _light_channel[0].value;
+          } else if (_light_use_white) {
+              _setWhite();
+          }
         }
 
     }
@@ -153,12 +178,13 @@ void _toRGB(char * rgb, size_t len, bool applyBrightness) {
     float b = applyBrightness ? (float) _light_brightness / LIGHT_MAX_BRIGHTNESS : 1;
 
     unsigned long value = 0;
+    unsigned int white = _getWhite();
 
-    value += _light_channel[0].value * b;
+    value += (_light_channel[0].value + white) * b;
     value <<= 8;
-    value += _light_channel[1].value * b;
+    value += (_light_channel[1].value + white) * b;
     value <<= 8;
-    value += _light_channel[2].value * b;
+    value += (_light_channel[2].value + white) * b;
 
     snprintf_P(rgb, len, PSTR("#%06X"), value);
 
@@ -298,10 +324,12 @@ void _toLong(char * color, size_t len, bool applyBrightness) {
 
     float b = applyBrightness ? (float) _light_brightness / LIGHT_MAX_BRIGHTNESS : 1;
 
+    unsigned int white = _getWhite();
+
     snprintf_P(color, len, PSTR("%d,%d,%d"),
-        (int) (_light_channel[0].value * b),
-        (int) (_light_channel[1].value * b),
-        (int) (_light_channel[2].value * b)
+        (int) ((_light_channel[0].value + white) * b),
+        (int) ((_light_channel[1].value + white) * b),
+        (int) ((_light_channel[2].value + white) * b)
     );
 
 }
@@ -379,17 +407,15 @@ void _shadow() {
     _light_steps_left--;
     if (_light_steps_left == 0) _light_transition_ticker.detach();
 
+    // Update 4 Channels if RGBW else 3
+    char channels = _light_use_white ? 4 : 3;
+
     // Transitions
     unsigned char target;
     for (unsigned int i=0; i < _light_channel.size(); i++) {
-        // Avoid modifying the white channel, we do it after the loop
-        if (_light_use_white && _light_has_color && i == 3) {
-          continue;
-        }
-
         if (_light_state && _light_channel[i].state) {
             target = _light_channel[i].value;
-            if ((_light_brightness < LIGHT_MAX_BRIGHTNESS) && _light_has_color && (i < 3)) {
+            if ((_light_brightness < LIGHT_MAX_BRIGHTNESS) && _light_has_color && (i < channels)) {
                 target *= ((float) _light_brightness / LIGHT_MAX_BRIGHTNESS);
             }
         } else {
@@ -403,16 +429,6 @@ void _shadow() {
         }
         _light_channel[i].shadow = _light_channel[i].current;
     }
-
-    // Calculate the white channel
-    if (_light_use_white && _light_has_color) {
-        unsigned int white = std::min(_light_channel[0].shadow, std::min(_light_channel[1].shadow, _light_channel[2].shadow));
-        _light_channel[0].shadow -= white;
-        _light_channel[1].shadow -= white;
-        _light_channel[2].shadow -= white;
-        _light_channel[3].shadow = white;
-    }
-
 }
 
 void _lightProviderUpdate() {
