@@ -382,6 +382,10 @@ void _shadow() {
     // Transitions
     unsigned char target;
     for (unsigned int i=0; i < _light_channel.size(); i++) {
+        if (_light_use_white && _light_has_color && i == 3) {
+          continue;
+        }
+
         if (_light_state && _light_channel[i].state) {
             target = _light_channel[i].value;
             if ((_light_brightness < LIGHT_MAX_BRIGHTNESS) && _light_has_color && (i < 3)) {
