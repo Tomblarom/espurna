@@ -365,9 +365,6 @@ void _toCSV(char * buffer, size_t len, bool applyBrightness) {
 // Thanks to Sacha Telgenhof for sharing this code in his AiLight library
 // https://github.com/stelgenhof/AiLight
 void _fromKelvin(unsigned long kelvin) {
-    //TODO: Move to config
-    unsigned int WW_kelvin = 2000; // 500 mireds
-    unsigned int CW_kelvin = 6500; // 153 mireds
 
 
     // Check we have RGB channels
