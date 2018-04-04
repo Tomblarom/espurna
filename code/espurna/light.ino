@@ -29,6 +29,7 @@ typedef struct {
     bool reverse;
     bool state;
     unsigned char value;        // target or nominal value
+    unsigned char original;     // original value before RGBW calculation
     unsigned char shadow;       // represented value
     double current;             // transition value
 } channel_t;
@@ -73,18 +74,37 @@ const unsigned char _light_gamma_table[] = {
 // UTILS
 // -----------------------------------------------------------------------------
 
-unsigned int _getWhite() {
-  if (!_light_use_white) return 0;
-  return _light_channel[3].value;
+// Returns the "correct" value for each channel
+char _getChannel(char i) {
+  if (_light_channel[i].original != 0) {
+    return _light_channel[i].original;
+  }
+
+  return _light_channel[i].value;
 }
 
 void _setWhite() {
-  unsigned int white = std::min(_light_channel[0].value, std::min(_light_channel[1].value, _light_channel[2].value));
+  unsigned int white, max_in, max_out;
+  double factor = 0;
 
-  _light_channel[0].value -= white;
-  _light_channel[1].value -= white;
-  _light_channel[2].value -= white;
+  white = std::min(_light_channel[0].value, std::min(_light_channel[1].value, _light_channel[2].value));
+  max_in = std::max(_light_channel[0].value, std::max(_light_channel[1].value, _light_channel[2].value));
+
+  for (unsigned int i=0; i < 3; i++) {
+    _light_channel[i].original = _light_channel[i].value;
+    _light_channel[i].value -= white;
+  }
   _light_channel[3].value = white;
+
+  max_out = std::max(std::max(_light_channel[0].value, _light_channel[1].value), std::max(_light_channel[2].value, _light_channel[3].value));
+
+  if (max_out > 0) {
+    factor = (double) (max_in / max_out);
+  }
+
+  for (unsigned int i=0; i < 4; i++) {
+    _light_channel[i].value = round(_light_channel[i].value * factor);;
+  }
 }
 
 
@@ -175,13 +195,12 @@ void _toRGB(char * rgb, size_t len, bool applyBrightness) {
     float b = applyBrightness ? (float) _light_brightness / LIGHT_MAX_BRIGHTNESS : 1;
 
     unsigned long value = 0;
-    unsigned int white = _getWhite();
 
-    value += (_light_channel[0].value + white) * b;
+    value += _getChannel(0) * b;
     value <<= 8;
-    value += (_light_channel[1].value + white) * b;
+    value += _getChannel(1) * b;
     value <<= 8;
-    value += (_light_channel[2].value + white) * b;
+    value += _getChannel(2) * b;
 
     snprintf_P(rgb, len, PSTR("#%06X"), value);
 
@@ -276,11 +295,9 @@ void _toHSV(char * hsv, size_t len) {
     double min, max;
     double h, s, v;
 
-    unsigned int white = _getWhite();
-
-    double r = (double) (_light_channel[0].value + white) / 255.0;
-    double g = (double) (_light_channel[1].value + white) / 255.0;
-    double b = (double) (_light_channel[2].value + white) / 255.0;
+    double r = (double) _getChannel(0) / 255.0;
+    double g = (double) _getChannel(1) / 255.0;
+    double b = (double) _getChannel(2) / 255.0;
 
     min = (r < g) ? r : g;
     min = (min < b) ? min : b;
@@ -327,12 +344,10 @@ void _toLong(char * color, size_t len, bool applyBrightness) {
 
     float b = applyBrightness ? (float) _light_brightness / LIGHT_MAX_BRIGHTNESS : 1;
 
-    unsigned int white = _getWhite();
-
     snprintf_P(color, len, PSTR("%d,%d,%d"),
-        (int) ((_light_channel[0].value + white) * b),
-        (int) ((_light_channel[1].value + white) * b),
-        (int) ((_light_channel[2].value + white) * b)
+        (int) (_getChannel(0) * b),
+        (int) (_getChannel(1) * b),
+        (int) (_getChannel(2) * b)
     );
 
 }
