@@ -366,7 +366,6 @@ void _toCSV(char * buffer, size_t len, bool applyBrightness) {
 // https://github.com/stelgenhof/AiLight
 void _fromKelvin(unsigned long kelvin) {
 
-
     // Check we have RGB channels
     if (!_light_has_color) return;
 
