@@ -73,16 +73,13 @@ const unsigned char _light_gamma_table[] = {
 // UTILS
 // -----------------------------------------------------------------------------
 
-unsigned int _getWhite(bool calculate = false) {
+unsigned int _getWhite() {
   if (!_light_use_white) return 0;
-  if (calculate) {
-    return std::min(_light_channel[0].value, std::min(_light_channel[1].value, _light_channel[2].value));
-  }
   return _light_channel[3].value;
 }
 
 void _setWhite() {
-  unsigned int white = _getWhite(true);
+  unsigned int white = std::min(_light_channel[0].value, std::min(_light_channel[1].value, _light_channel[2].value));
 
   _light_channel[0].value -= white;
   _light_channel[1].value -= white;
@@ -264,6 +261,10 @@ void _fromHSV(const char * hsv) {
             break;
     }
 
+    if (_light_use_white) {
+        _setWhite();
+    }
+
     _light_brightness = LIGHT_MAX_BRIGHTNESS;
 
 }
@@ -275,9 +276,11 @@ void _toHSV(char * hsv, size_t len) {
     double min, max;
     double h, s, v;
 
-    double r = (double) _light_channel[0].value / 255.0;
-    double g = (double) _light_channel[1].value / 255.0;
-    double b = (double) _light_channel[2].value / 255.0;
+    unsigned int white = _getWhite();
+
+    double r = (double) (_light_channel[0].value + white) / 255.0;
+    double g = (double) (_light_channel[1].value + white) / 255.0;
+    double b = (double) (_light_channel[2].value + white) / 255.0;
 
     min = (r < g) ? r : g;
     min = (min < b) ? min : b;
