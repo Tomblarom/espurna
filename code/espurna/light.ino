@@ -77,6 +77,13 @@ const unsigned char _light_gamma_table[] = {
 // Returns the "correct" value for each channel
 char _getChannel(char i) {
   if (_light_channel[i].original != 0) {
+    // Reset value when user disable the white channel without rebooting:
+    if (!_light_use_white) {
+      _light_channel[i].value = _light_channel[i].original;
+      _light_channel[i].original = 0;
+      return _light_channel[i].value;
+    }
+    
     return _light_channel[i].original;
   }
 
