@@ -30,6 +30,7 @@ typedef struct {
     bool state;
     unsigned char value;        // target or nominal value
     unsigned char original;     // original value before RGBW calculation
+    bool useOriginal;           // determine if it should use the original or value variable
     unsigned char shadow;       // represented value
     double current;             // transition value
 } channel_t;
@@ -75,11 +76,12 @@ const unsigned char _light_gamma_table[] = {
 // -----------------------------------------------------------------------------
 
 // Returns the "correct" value for each channel
-char _getChannel(char i) {
-  if (_light_channel[i].original != 0) {
+unsigned char _getChannel(char i) {
+  if (_light_channel[i].useOriginal) {
     // Reset value when user disable the white channel without rebooting:
     if (!_light_use_white) {
       _light_channel[i].value = _light_channel[i].original;
+      _light_channel[i].useOriginal = false;
       _light_channel[i].original = 0;
       return _light_channel[i].value;
     }
@@ -100,6 +102,7 @@ void _setWhite() {
   max_in = std::max(_light_channel[0].value, std::max(_light_channel[1].value, _light_channel[2].value));
 
   for (unsigned int i=0; i < 3; i++) {
+    _light_channel[i].useOriginal = true;
     _light_channel[i].original = _light_channel[i].value;
     _light_channel[i].value -= white;
   }
@@ -362,6 +365,10 @@ void _toCSV(char * buffer, size_t len, bool applyBrightness) {
 // Thanks to Sacha Telgenhof for sharing this code in his AiLight library
 // https://github.com/stelgenhof/AiLight
 void _fromKelvin(unsigned long kelvin) {
+    //TODO: Move to config
+    unsigned int WW_kelvin = 2000; // 500 mireds
+    unsigned int CW_kelvin = 6500; // 153 mireds
+
 
     // Check we have RGB channels
     if (!_light_has_color) return;
