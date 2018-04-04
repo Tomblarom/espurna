@@ -83,7 +83,7 @@ char _getChannel(char i) {
       _light_channel[i].original = 0;
       return _light_channel[i].value;
     }
-    
+
     return _light_channel[i].original;
   }
 
@@ -91,6 +91,8 @@ char _getChannel(char i) {
 }
 
 void _setWhite() {
+  if (!_light_use_white) return;
+
   unsigned int white, max_in, max_out;
   double factor = 0;
 
@@ -135,41 +137,31 @@ void _fromRGB(const char * rgb) {
     char * p = (char *) rgb;
     if (strlen(p) == 0) return;
 
-    // if color begins with a # then assume HEX RGB
-    if (p[0] == '#') {
-
+    switch (p[0]) {
+      case '#': // HEX Value
         if (_light_has_color) {
-
             ++p;
             unsigned long value = strtoul(p, NULL, 16);
-
             // RGBA values are interpreted like RGB + brightness
             _fromLong(value, strlen(p) > 7);
-
-            if (_light_use_white) {
-                _setWhite();
-            }
+            _setWhite();
         }
-
-    // it's a temperature in mireds
-    } else if (p[0] == 'M') {
-
+        break;
+      case 'M': // Mired Value
         if (_light_has_color) {
             unsigned long mireds = atol(p + 1);
             _fromMireds(mireds);
+            //_setWhite();
         }
-
-    // it's a temperature in kelvin
-    } else if (p[0] == 'K') {
-
+        break;
+      case 'K': // Kelvin Value
         if (_light_has_color) {
             unsigned long kelvin = atol(p + 1);
             _fromKelvin(kelvin);
+            //_setWhite();
         }
-
-    // otherwise assume decimal values separated by commas
-    } else {
-
+        break;
+      default: // assume decimal values separated by commas
         char * tok;
         unsigned char count = 0;
         unsigned char channels = _light_channel.size();
@@ -181,18 +173,14 @@ void _fromRGB(const char * rgb) {
             tok = strtok(NULL, ",");
         }
 
-        if (_light_has_color) {
-          // RGB but less than 3 values received
-          if (count < 3) {
+        // RGB but less than 3 values received
+        if (_light_has_color && count < 3) {
             _light_channel[1].value = _light_channel[0].value;
             _light_channel[2].value = _light_channel[0].value;
-          } else if (_light_use_white) {
-              _setWhite();
-          }
         }
-
+        _setWhite();
+        break;
     }
-
 }
 
 void _toRGB(char * rgb, size_t len, bool applyBrightness) {
@@ -287,12 +275,9 @@ void _fromHSV(const char * hsv) {
             break;
     }
 
-    if (_light_use_white) {
-        _setWhite();
-    }
+    _setWhite();
 
     _light_brightness = LIGHT_MAX_BRIGHTNESS;
-
 }
 
 void _toHSV(char * hsv, size_t len) {
