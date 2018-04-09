@@ -93,6 +93,15 @@ double _magnitudeProcess(unsigned char type, double value) {
 
 #if WEB_SUPPORT
 
+bool _sensorWebSocketOnReceive(const char * key, JsonVariant& value) {
+    if (strncmp(key, "pwr", 3) == 0) return true;
+    if (strncmp(key, "sns", 3) == 0) return true;
+    if (strncmp(key, "tmp", 3) == 0) return true;
+    if (strncmp(key, "hum", 3) == 0) return true;
+    if (strncmp(key, "energy", 6) == 0) return true;
+    return false;
+}
+
 void _sensorWebSocketSendData(JsonObject& root) {
 
     char buffer[10];
@@ -168,7 +177,7 @@ void _sensorWebSocketStart(JsonObject& root) {
     if (_magnitudes.size() > 0) {
         root["sensorsVisible"] = 1;
         //root["apiRealTime"] = _sensor_realtime;
-        root["powerUnits"] = _sensor_power_units;
+        root["pwrUnits"] = _sensor_power_units;
         root["energyUnits"] = _sensor_energy_units;
         root["tmpUnits"] = _sensor_temperature_units;
         root["tmpCorrection"] = _sensor_temperature_correction;
@@ -587,7 +596,7 @@ void _sensorConfigure() {
     _sensor_read_interval = 1000 * constrain(getSetting("snsRead", SENSOR_READ_INTERVAL).toInt(), SENSOR_READ_MIN_INTERVAL, SENSOR_READ_MAX_INTERVAL);
     _sensor_report_every = constrain(getSetting("snsReport", SENSOR_REPORT_EVERY).toInt(), SENSOR_REPORT_MIN_EVERY, SENSOR_REPORT_MAX_EVERY);
     _sensor_realtime = getSetting("apiRealTime", API_REAL_TIME_VALUES).toInt() == 1;
-    _sensor_power_units = getSetting("powerUnits", SENSOR_POWER_UNITS).toInt();
+    _sensor_power_units = getSetting("pwrUnits", SENSOR_POWER_UNITS).toInt();
     _sensor_energy_units = getSetting("energyUnits", SENSOR_ENERGY_UNITS).toInt();
     _sensor_temperature_units = getSetting("tmpUnits", SENSOR_TEMPERATURE_UNITS).toInt();
     _sensor_temperature_correction = getSetting("tmpCorrection", SENSOR_TEMPERATURE_CORRECTION).toFloat();
@@ -774,6 +783,9 @@ String magnitudeUnits(unsigned char type) {
 
 void sensorSetup() {
 
+    // Backwards compatibility
+    moveSetting("powerUnits", "pwrUnits");
+
     // Load sensors
     _sensorLoad();
     _sensorInit();
@@ -785,6 +797,7 @@ void sensorSetup() {
 
         // Websockets
         wsOnSendRegister(_sensorWebSocketStart);
+        wsOnReceiveRegister(_sensorWebSocketOnReceive);
         wsOnSendRegister(_sensorWebSocketSendData);
         wsOnAfterParseRegister(_sensorConfigure);
 
@@ -833,6 +846,11 @@ void sensorLoop() {
         // Pre-read hook
         _sensorPre();
 
+        // Get the first relay state
+        #if SENSOR_POWER_CHECK_STATUS
+            bool relay_off = (relayCount() > 0) && (relayStatus(0) == 0);
+        #endif
+
         // Get readings
         for (unsigned char i=0; i<_magnitudes.size(); i++) {
 
@@ -840,16 +858,33 @@ void sensorLoop() {
 
             if (magnitude.sensor->status()) {
 
-                unsigned char decimals = _magnitudeDecimals(magnitude.type);
-
                 current = magnitude.sensor->value(magnitude.local);
+
+                // Completely remove spurious values if relay is OFF
+                #if SENSOR_POWER_CHECK_STATUS
+                    if (relay_off) {
+                        if (magnitude.type == MAGNITUDE_POWER_ACTIVE ||
+                            magnitude.type == MAGNITUDE_POWER_REACTIVE ||
+                            magnitude.type == MAGNITUDE_POWER_APPARENT ||
+                            magnitude.type == MAGNITUDE_CURRENT ||
+                            magnitude.type == MAGNITUDE_ENERGY_DELTA
+                        ) {
+                            current = 0;
+                        }
+                    }
+                #endif
+
                 magnitude.filter->add(current);
 
                 // Special case
-                if (magnitude.type == MAGNITUDE_EVENTS) current = magnitude.filter->result();
+                if (magnitude.type == MAGNITUDE_EVENTS) {
+                    current = magnitude.filter->result();
+                }
 
                 current = _magnitudeProcess(magnitude.type, current);
                 _magnitudes[i].current = current;
+
+                unsigned char decimals = _magnitudeDecimals(magnitude.type);
 
                 // Debug
                 #if SENSOR_DEBUG

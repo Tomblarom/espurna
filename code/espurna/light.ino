@@ -37,6 +37,7 @@ std::vector<channel_t> _light_channel;
 
 bool _light_state = false;
 bool _light_use_transitions = false;
+unsigned int _light_transition_time = LIGHT_TRANSITION_TIME;
 bool _light_has_color = false;
 bool _light_use_white = false;
 bool _light_use_gamma = false;
@@ -76,47 +77,57 @@ const unsigned char _light_gamma_table[] = {
 // -----------------------------------------------------------------------------
 
 void _setRGBInputValue(unsigned char red, unsigned char green, unsigned char blue) {
-  _light_channel[0].inputValue = red;
-  _light_channel[1].inputValue = green;
-  _light_channel[2].inputValue = blue;
+    _light_channel[0].inputValue = red;
+    _light_channel[1].inputValue = green;
+    _light_channel[2].inputValue = blue;
 }
 
 void _generateBrightness() {
-  double brightness = (double) _light_brightness / LIGHT_MAX_BRIGHTNESS;
 
-  // Convert RGB to RGBW
-  if (_light_has_color && _light_use_white) {
-    unsigned char white, max_in, max_out;
-    double factor = 0;
+    double brightness = (double) _light_brightness / LIGHT_MAX_BRIGHTNESS;
 
-    white = std::min(_light_channel[0].inputValue, std::min(_light_channel[1].inputValue, _light_channel[2].inputValue));
-    max_in = std::max(_light_channel[0].inputValue, std::max(_light_channel[1].inputValue, _light_channel[2].inputValue));
+    // Convert RGB to RGBW
+    if (_light_has_color && _light_use_white) {
 
-    for (unsigned int i=0; i < 3; i++) {
-      _light_channel[i].value = _light_channel[i].inputValue - white;
+        unsigned char white, max_in, max_out;
+        double factor = 0;
+
+        white = std::min(_light_channel[0].inputValue, std::min(_light_channel[1].inputValue, _light_channel[2].inputValue));
+        max_in = std::max(_light_channel[0].inputValue, std::max(_light_channel[1].inputValue, _light_channel[2].inputValue));
+
+        for (unsigned int i=0; i < 3; i++) {
+            _light_channel[i].value = _light_channel[i].inputValue - white;
+        }
+        _light_channel[3].value = white;
+
+        max_out = std::max(std::max(_light_channel[0].value, _light_channel[1].value), std::max(_light_channel[2].value, _light_channel[3].value));
+        if (max_out > 0) {
+            factor = (double) (max_in / max_out);
+        }
+
+        // Scale up to equal input values. So [250,150,50] -> [200,100,0,50] -> [250, 125, 0, 63]
+        for (unsigned int i=0; i < 4; i++) {
+            _light_channel[i].value = round((double) _light_channel[i].value * factor * brightness);
+        }
+
+        // Don't apply brightness, it is already in the inputValue:
+        if (_light_channel.size() == 5) {
+            _light_channel[4].value = _light_channel[4].inputValue;
+        }
+
+    } else {
+
+        // Don't apply brightness, it is already in the inputValue:
+        for (unsigned char i=0; i < _light_channel.size(); i++) {
+            if (_light_has_color & (i<3)) {
+                _light_channel[i].value = _light_channel[i].inputValue * brightness;
+            } else {
+                _light_channel[i].value = _light_channel[i].inputValue;
+            }
+        }
+
     }
-    _light_channel[3].value = white;
 
-    max_out = std::max(std::max(_light_channel[0].value, _light_channel[1].value), std::max(_light_channel[2].value, _light_channel[3].value));
-
-    if (max_out > 0) {
-      factor = (double) (max_in / max_out);
-    }
-
-    // Scale up to equal input values. So [250,150,50] -> [200,100,0,50] -> [250, 125, 0, 63]
-    for (unsigned int i=0; i < 4; i++) {
-      _light_channel[i].value = round((double) _light_channel[i].value * factor * brightness);
-    }
-    // Don't apply brightness, it is already in the inputValue:
-    if (_light_channel.size() == 5) {
-      _light_channel[4].value = _light_channel[4].inputValue;
-    }
-  } else {
-    // Don't apply brightness, it is already in the inputValue:
-    for (unsigned char i=0; i < _light_channel.size(); i++) {
-      _light_channel[i].value = _light_channel[i].inputValue;
-    }
-  }
 }
 
 // -----------------------------------------------------------------------------
@@ -239,7 +250,7 @@ void _fromHSV(const char * hsv) {
             _setRGBInputValue(255, p, q);
             break;
         default:
-            _setRGBInputValue(0,0,0);
+            _setRGBInputValue(0, 0, 0);
             break;
     }
 }
@@ -269,9 +280,9 @@ void _fromKelvin(unsigned long kelvin, bool setMireds) {
             : 138.5177312231 * log(kelvin - 10) - 305.0447927307);
 
     _setRGBInputValue(
-      constrain(red, 0, LIGHT_MAX_VALUE),
-      constrain(green, 0, LIGHT_MAX_VALUE),
-      constrain(blue, 0, LIGHT_MAX_VALUE)
+        constrain(red, 0, LIGHT_MAX_VALUE),
+        constrain(green, 0, LIGHT_MAX_VALUE),
+        constrain(blue, 0, LIGHT_MAX_VALUE)
     );
 }
 
@@ -610,7 +621,7 @@ void lightUpdate(bool save, bool forward, bool group_forward) {
     _generateBrightness();
 
     // Configure color transition
-    _light_steps_left = _light_use_transitions ? LIGHT_TRANSITION_STEPS : 1;
+    _light_steps_left = _light_use_transitions ? _light_transition_time / LIGHT_TRANSITION_STEP : 1;
     _light_transition_ticker.attach_ms(LIGHT_TRANSITION_STEP, _lightProviderUpdate);
 
     // Report channels to local broker
@@ -724,6 +735,12 @@ void lightBrightnessStep(int steps) {
 
 #if WEB_SUPPORT
 
+bool _lightWebSocketOnReceive(const char * key, JsonVariant& value) {
+    if (strncmp(key, "light", 5) == 0) return true;
+    if (strncmp(key, "use", 3) == 0) return true;
+    return false;
+}
+
 void _lightWebSocketOnSend(JsonObject& root) {
     root["colorVisible"] = 1;
     root["mqttGroupColor"] = getSetting("mqttGroupColor");
@@ -731,6 +748,7 @@ void _lightWebSocketOnSend(JsonObject& root) {
     root["useWhite"] = _light_use_white;
     root["useGamma"] = _light_use_gamma;
     root["useTransitions"] = _light_use_transitions;
+    root["lightTime"] = _light_transition_time;
     root["useCSS"] = getSetting("useCSS", LIGHT_USE_CSS).toInt() == 1;
     bool useRGB = getSetting("useRGB", LIGHT_USE_RGB).toInt() == 1;
     root["useRGB"] = useRGB;
@@ -947,6 +965,7 @@ void _lightConfigure() {
 
     _light_use_gamma = getSetting("useGamma", LIGHT_USE_GAMMA).toInt() == 1;
     _light_use_transitions = getSetting("useTransitions", LIGHT_USE_TRANSITIONS).toInt() == 1;
+    _light_transition_time = getSetting("lightTime", LIGHT_TRANSITION_TIME).toInt();
 
 }
 
@@ -1013,6 +1032,7 @@ void lightSetup() {
         _lightAPISetup();
         wsOnSendRegister(_lightWebSocketOnSend);
         wsOnActionRegister(_lightWebSocketOnAction);
+        wsOnReceiveRegister(_lightWebSocketOnReceive);
         wsOnAfterParseRegister([]() {
             #if LIGHT_SAVE_ENABLED == 0
                 lightSave();
