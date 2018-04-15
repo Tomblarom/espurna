@@ -640,7 +640,8 @@
 #endif
 
 // These particles will be concatenated to the MQTT_TOPIC base to form the actual topic
-#define MQTT_TOPIC_JSON             "data"
+#define MQTT_TOPIC_DATA             "data"
+#define MQTT_TOPIC_JSON            "json"
 #define MQTT_TOPIC_ACTION           "action"
 #define MQTT_TOPIC_RELAY            "relay"
 #define MQTT_TOPIC_LED              "led"

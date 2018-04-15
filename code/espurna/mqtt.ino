@@ -40,7 +40,7 @@ unsigned char _mqtt_qos = MQTT_QOS;
 bool _mqtt_retain = MQTT_RETAIN;
 unsigned long _mqtt_keepalive = MQTT_KEEPALIVE;
 String _mqtt_topic;
-String _mqtt_topic_json;
+String _mqtt_topic_data;
 String _mqtt_setter;
 String _mqtt_getter;
 bool _mqtt_forward;
@@ -244,7 +244,7 @@ void _mqttConfigure() {
         _mqtt_enabled = getSetting("mqttEnabled", MQTT_ENABLED).toInt() == 1;
     }
     _mqtt_use_json = (getSetting("mqttUseJson", MQTT_USE_JSON).toInt() == 1);
-    mqttQueueTopic(MQTT_TOPIC_JSON);
+    mqttQueueTopic(MQTT_TOPIC_DATA);
 
     _mqtt_reconnect_delay = MQTT_RECONNECT_DELAY_MIN;
 
@@ -509,13 +509,13 @@ void mqttSendRaw(const char * topic, const char * message) {
 
 void mqttSend(const char * topic, const char * message, bool force, bool retain) {
 
-    bool useJson = force ? false : _mqtt_use_json;
+    bool useData = force ? false : _mqtt_use_json;
 
     // Equeue message
-    if (useJson) {
+    if (useData) {
 
         // Set default queue topic
-        mqttQueueTopic(MQTT_TOPIC_JSON);
+        mqttQueueTopic(MQTT_TOPIC_DATA);
 
         // Enqueue new message
         mqttEnqueue(topic, message);
@@ -606,7 +606,7 @@ void mqttFlush() {
     // Send
     String output;
     root.printTo(output);
-    mqttSendRaw(_mqtt_topic_json.c_str(), output.c_str(), false);
+    mqttSendRaw(_mqtt_topic_data.c_str(), output.c_str(), false);
 
     // Clear queue
     for (unsigned char i = 0; i < _mqtt_queue.size(); i++) {
@@ -622,9 +622,9 @@ void mqttFlush() {
 
 void mqttQueueTopic(const char * topic) {
     String t = mqttTopic(topic, false);
-    if (!t.equals(_mqtt_topic_json)) {
+    if (!t.equals(_mqtt_topic_data)) {
         mqttFlush();
-        _mqtt_topic_json = t;
+        _mqtt_topic_data = t;
     }
 }
 

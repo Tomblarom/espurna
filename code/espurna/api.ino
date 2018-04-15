@@ -61,13 +61,13 @@ bool _authAPI(AsyncWebServerRequest *request) {
 
 }
 
-bool _asJson(AsyncWebServerRequest *request) {
-    bool asJson = false;
+bool _asData(AsyncWebServerRequest *request) {
+    bool asData = false;
     if (request->hasHeader("Accept")) {
         AsyncWebHeader* h = request->getHeader("Accept");
-        asJson = h->value().equals("application/json");
+        asData = h->value().equals("application/json");
     }
-    return asJson;
+    return asData;
 }
 
 ArRequestHandlerFunction _bindAPI(unsigned int apiID) {
@@ -100,7 +100,7 @@ ArRequestHandlerFunction _bindAPI(unsigned int apiID) {
         DEBUG_MSG_P(PSTR("[API] Sending response '%s'\n"), value);
 
         // Format response according to the Accept header
-        if (_asJson(request)) {
+        if (_asData(request)) {
             char buffer[64];
             snprintf_P(buffer, sizeof(buffer), PSTR("{ \"%s\": %s }"), api.key, value);
             request->send(200, "application/json", buffer);
@@ -117,12 +117,12 @@ void _onAPIs(AsyncWebServerRequest *request) {
     webLog(request);
     if (!_authAPI(request)) return;
 
-    bool asJson = _asJson(request);
+    bool asData = _asData(request);
 
     char buffer[40];
 
     String output;
-    if (asJson) {
+    if (asData) {
         DynamicJsonBuffer jsonBuffer;
         JsonObject& root = jsonBuffer.createObject();
         for (unsigned int i=0; i < _apis.size(); i++) {
@@ -147,7 +147,7 @@ void _onRPC(AsyncWebServerRequest *request) {
     webLog(request);
     if (!_authAPI(request)) return;
 
-    //bool asJson = _asJson(request);
+    //bool asData = _asData(request);
     int response = 404;
 
     if (request->hasParam("action")) {
