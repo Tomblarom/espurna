@@ -616,16 +616,16 @@
 #endif
 
 
-#ifndef MQTT_USE_JSON
-#define MQTT_USE_JSON               0               // Group messages in a JSON body
+#ifndef MQTT_USE_DATA
+#define MQTT_USE_DATA               0               // Group messages in a JSON body
 #endif
 
-#ifndef MQTT_USE_JSON_DELAY
-#define MQTT_USE_JSON_DELAY         100             // Wait this many ms before grouping messages
+#ifndef MQTT_USE_DATA_DELAY
+#define MQTT_USE_DATA_DELAY         100             // Wait this many ms before grouping messages
 #endif
 
 #ifndef MQTT_QUEUE_MAX_SIZE
-#define MQTT_QUEUE_MAX_SIZE         20              // Size of the MQTT queue when MQTT_USE_JSON is enabled
+#define MQTT_QUEUE_MAX_SIZE         20              // Size of the MQTT queue when MQTT_USE_DATA is enabled
 #endif
 
 

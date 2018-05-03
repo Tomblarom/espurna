@@ -487,6 +487,21 @@ void _lightColorRestore() {
 // -----------------------------------------------------------------------------
 
 #if MQTT_SUPPORT
+
+void _lighMQTTJSONState(JsonObject& root) {
+    root["brightness"] = _light_brightness;
+    if (_light_has_color) {
+        JsonObject& color = root.createNestedObject("color");
+        color["r"] = _light_channel[0].inputValue;
+        color["g"] = _light_channel[1].inputValue;
+        color["b"] = _light_channel[2].inputValue;
+
+        if (_light_use_cct) {
+            root["color_temp"] = _light_mireds;
+        }
+    }
+}
+
 void _lightMQTTCallback(unsigned int type, const char * topic, const char * payload) {
 
     String mqtt_group_color = getSetting("mqttGroupColor");
@@ -505,9 +520,15 @@ void _lightMQTTCallback(unsigned int type, const char * topic, const char * payl
         if (mqtt_group_color.length() > 0) mqttSubscribeRaw(mqtt_group_color.c_str());
 
         // Channels
-        char buffer[strlen(MQTT_TOPIC_CHANNEL) + 3];
-        snprintf_P(buffer, sizeof(buffer), PSTR("%s/+"), MQTT_TOPIC_CHANNEL);
-        mqttSubscribe(buffer);
+        char ChannelsBuffer[strlen(MQTT_TOPIC_CHANNEL) + 3];
+        snprintf_P(ChannelsBuffer, sizeof(ChannelsBuffer), PSTR("%s/+"), MQTT_TOPIC_CHANNEL);
+        mqttSubscribe(ChannelsBuffer);
+
+        // MQTT JSON
+        // Not needed? Subscription already happend in relay.ino
+        // char JSONBuffer[strlen(MQTT_TOPIC_JSON) + 3];
+        // snprintf_P(JSONBuffer, sizeof(JSONBuffer), PSTR("%s/+"), MQTT_TOPIC_JSON);
+        // mqttSubscribe(JSONBuffer);
 
     }
 
@@ -522,6 +543,30 @@ void _lightMQTTCallback(unsigned int type, const char * topic, const char * payl
 
         // Match topic
         String t = mqttMagnitude((char *) topic);
+
+        // Color, temperature in mireds and brightness
+        if (t.startsWith(MQTT_TOPIC_JSON)) {
+            DEBUG_MSG_P(PSTR("[MQTT-JSON] Got it! (%s)\n"), payload);
+            StaticJsonBuffer<200> jsonBuffer;
+            JsonObject& root = jsonBuffer.parseObject(payload);
+
+            if (root["brightness"]) {
+                _light_brightness = constrain(root["brightness"], 0, LIGHT_MAX_BRIGHTNESS);
+            }
+
+            if (root["color"]) {
+                //TODO: Validate if r, g, b exist?
+                _setRGBInputValue(root["color"]["r"], root["color"]["g"], root["color"]["b"]);
+            } else if (root["color_temp"]) {
+                _fromMireds(root["color_temp"]);
+            }
+
+            if (root["color"] || root["brightness"] || root["color_temp"]) {
+                lightUpdate(true, mqttForward());
+            }
+
+            return;
+        }
 
         // Color temperature in mireds
         if (t.equals(MQTT_TOPIC_MIRED)) {

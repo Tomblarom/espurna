@@ -34,7 +34,7 @@ WiFiClientSecure _mqtt_client_secure;
 #endif // MQTT_USE_ASYNC
 
 bool _mqtt_enabled = MQTT_ENABLED;
-bool _mqtt_use_json = false;
+bool _MQTT_USE_DATA = false;
 unsigned long _mqtt_reconnect_delay = MQTT_RECONNECT_DELAY_MIN;
 unsigned char _mqtt_qos = MQTT_QOS;
 bool _mqtt_retain = MQTT_RETAIN;
@@ -243,8 +243,8 @@ void _mqttConfigure() {
     } else {
         _mqtt_enabled = getSetting("mqttEnabled", MQTT_ENABLED).toInt() == 1;
     }
-    _mqtt_use_json = (getSetting("mqttUseJson", MQTT_USE_JSON).toInt() == 1);
-    mqttQueueTopic(MQTT_TOPIC_JSON);
+    _MQTT_USE_DATA = (getSetting("mqttUseJson", MQTT_USE_DATA).toInt() == 1);
+    mqttQueueTopic(MQTT_TOPIC_DATA);
 
     _mqtt_reconnect_delay = MQTT_RECONNECT_DELAY_MIN;
 
@@ -320,7 +320,7 @@ void _mqttWebSocketOnSend(JsonObject& root) {
         root["mqttFP"] = getSetting("mqttFP", MQTT_SSL_FINGERPRINT);
     #endif
     root["mqttTopic"] = getSetting("mqttTopic", MQTT_TOPIC);
-    root["mqttUseJson"] = getSetting("mqttUseJson", MQTT_USE_JSON).toInt() == 1;
+    root["mqttUseJson"] = getSetting("mqttUseJson", MQTT_USE_DATA).toInt() == 1;
 }
 
 #endif
@@ -509,19 +509,19 @@ void mqttSendRaw(const char * topic, const char * message) {
 
 void mqttSend(const char * topic, const char * message, bool force, bool retain) {
 
-    bool useJson = force ? false : _mqtt_use_json;
+    bool useJson = force ? false : _MQTT_USE_DATA;
 
     // Equeue message
     if (useJson) {
 
         // Set default queue topic
-        mqttQueueTopic(MQTT_TOPIC_JSON);
+        mqttQueueTopic(MQTT_TOPIC_DATA);
 
         // Enqueue new message
         mqttEnqueue(topic, message);
 
         // Reset flush timer
-        _mqtt_flush_ticker.once_ms(MQTT_USE_JSON_DELAY, mqttFlush);
+        _mqtt_flush_ticker.once_ms(MQTT_USE_DATA_DELAY, mqttFlush);
 
     // Send it right away
     } else {

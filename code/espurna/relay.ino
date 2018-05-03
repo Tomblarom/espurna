@@ -636,6 +636,19 @@ void relaySetupAPI() {
 
 #if MQTT_SUPPORT
 
+String getJsonState(unsigned char id) {
+    StaticJsonBuffer<200> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+    root["state"] = _relays[id].current_status ? "ON" : "OFF";
+
+    _lighMQTTJSONState(root);
+
+    String pl;
+    root.printTo(pl);
+
+    return pl;
+}
+
 void relayMQTT(unsigned char id) {
 
     if (id >= _relays.size()) return;
@@ -644,6 +657,7 @@ void relayMQTT(unsigned char id) {
     if (_relays[id].report) {
         _relays[id].report = false;
         mqttSend(MQTT_TOPIC_RELAY, id, _relays[id].current_status ? "1" : "0");
+        mqttSend(MQTT_TOPIC_JSON, id, getJsonState(id).c_str());
     }
 
     // Check group topic
@@ -661,6 +675,7 @@ void relayMQTT(unsigned char id) {
 void relayMQTT() {
     for (unsigned int id=0; id < _relays.size(); id++) {
         mqttSend(MQTT_TOPIC_RELAY, id, _relays[id].current_status ? "1" : "0");
+        mqttSend(MQTT_TOPIC_JSON, id, getJsonState(id).c_str());
     }
 }
 
@@ -692,9 +707,15 @@ void relayMQTTCallback(unsigned int type, const char * topic, const char * paylo
         #endif
 
         // Subscribe to own /set topic
-        char buffer[strlen(MQTT_TOPIC_RELAY) + 3];
-        snprintf_P(buffer, sizeof(buffer), PSTR("%s/+"), MQTT_TOPIC_RELAY);
-        mqttSubscribe(buffer);
+        char relayBuffer[strlen(MQTT_TOPIC_RELAY) + 3];
+        snprintf_P(relayBuffer, sizeof(relayBuffer), PSTR("%s/+"), MQTT_TOPIC_RELAY);
+        mqttSubscribe(relayBuffer);
+
+        // Subscribe to MQTT_JSON topic
+        char JSONBuffer[strlen(MQTT_TOPIC_JSON) + 3];
+        snprintf_P(JSONBuffer, sizeof(JSONBuffer), PSTR("%s/+"), MQTT_TOPIC_JSON);
+        mqttSubscribe(JSONBuffer);
+
 
         // Subscribe to group topics
         for (unsigned int i=0; i < _relays.size(); i++) {
@@ -724,6 +745,21 @@ void relayMQTTCallback(unsigned int type, const char * topic, const char * paylo
 
             return;
 
+        }
+
+        if (t.startsWith(MQTT_TOPIC_JSON)) {
+
+            // Get relay ID
+            unsigned int id = t.substring(strlen(MQTT_TOPIC_JSON)+1).toInt();
+            if (id >= relayCount()) {
+                DEBUG_MSG_P(PSTR("[MQTT-JSON] Wrong relayID (%d)\n"), id);
+            } else {
+                StaticJsonBuffer<200> jsonBuffer;
+                JsonObject& root = jsonBuffer.parseObject(payload);
+                relayStatusWrap(id, root["state"] == "ON", false);
+            }
+
+            return;
         }
 
         // Check group topics
