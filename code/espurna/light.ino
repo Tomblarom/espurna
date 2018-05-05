@@ -416,7 +416,8 @@ unsigned int _toPWM(unsigned char id) {
     return _toPWM(_light_channel[id].shadow, useGamma, _light_channel[id].reverse);
 }
 
-void _shadow() {
+void _lightProviderUpdate() {
+
     // Update transition ticker
     _light_steps_left--;
     if (_light_steps_left == 0) _light_transition_ticker.detach();
@@ -433,11 +434,6 @@ void _shadow() {
         }
         _light_channel[i].shadow = _light_channel[i].current;
     }
-}
-
-void _lightProviderUpdate() {
-
-    _shadow();
 
     #if LIGHT_PROVIDER == LIGHT_PROVIDER_MY92XX
 
@@ -555,18 +551,24 @@ void _lightMQTTCallback(unsigned int type, const char * topic, const char * payl
 
             lightState(root["state"] == "ON");
 
-            if (data.containsKey("brightness")) {
+            if (root.containsKey("brightness")) {
                 _light_brightness = constrain(root["brightness"], 0, LIGHT_MAX_BRIGHTNESS);
             }
 
-            if (data.containsKey("color")) {
+            if (root.containsKey("color")) {
                 //TODO: Validate if r, g, b exist?
                 _setRGBInputValue(root["color"]["r"], root["color"]["g"], root["color"]["b"]);
-            } else if (data.containsKey("color_temp")) {
+            } else if (root.containsKey("color_temp")) {
                 _fromMireds(root["color_temp"]);
             }
 
-            lightUpdate(true, mqttForward());
+            if (root.containsKey("transition")) {
+                // Convert seconds in milliseconds
+                lightUpdate(true, mqttForward(), (unsigned int) root["transition"] * 1000);
+            } else {
+                lightUpdate(true, mqttForward());
+            }
+
             return;
         }
 
@@ -718,12 +720,15 @@ bool lightHasColor() {
     return _light_has_color;
 }
 
-void lightUpdate(bool save, bool forward, bool group_forward) {
+void lightUpdate(bool save, bool forward, bool group_forward, unsigned int transition_time) {
 
     _generateBrightness();
 
     // Configure color transition
-    _light_steps_left = _light_use_transitions ? _light_transition_time / LIGHT_TRANSITION_STEP : 1;
+    _light_steps_left = transition_time > 0 ? transition_time / LIGHT_TRANSITION_STEP : 1;
+
+    DEBUG_MSG_P(PSTR("[LIGHT-UPDATE] Transition Time: %d / Steps: %d\n"), transition_time, (int) round(_light_steps_left));
+
     _light_transition_ticker.attach_ms(LIGHT_TRANSITION_STEP, _lightProviderUpdate);
 
     // Report channels to local broker
@@ -749,8 +754,16 @@ void lightUpdate(bool save, bool forward, bool group_forward) {
 
 };
 
+void lightUpdate(bool save, bool forward, bool group_forward) {
+    lightUpdate(save, forward, group_forward, _light_transition_time);
+}
+
 void lightUpdate(bool save, bool forward) {
     lightUpdate(save, forward, true);
+}
+
+void lightUpdate(bool save, bool forward, unsigned int transition_time) {
+    lightUpdate(save, forward, true, transition_time);
 }
 
 #if LIGHT_SAVE_ENABLED == 0
@@ -1085,6 +1098,9 @@ void _lightConfigure() {
     _light_use_transitions = getSetting("useTransitions", LIGHT_USE_TRANSITIONS).toInt() == 1;
     _light_transition_time = getSetting("lightTime", LIGHT_TRANSITION_TIME).toInt();
 
+    if (!_light_use_transitions) {
+        _light_transition_time = 0;
+    }
 }
 
 void lightSetup() {
