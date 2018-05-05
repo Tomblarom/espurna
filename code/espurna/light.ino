@@ -488,18 +488,10 @@ void _lightColorRestore() {
 
 #if MQTT_SUPPORT
 
-void _lighMQTTJSONState(JsonObject& root) {
-    root["brightness"] = _light_brightness;
-    if (_light_has_color) {
-        JsonObject& color = root.createNestedObject("color");
-        color["r"] = _light_channel[0].inputValue;
-        color["g"] = _light_channel[1].inputValue;
-        color["b"] = _light_channel[2].inputValue;
-
-        if (_light_use_cct) {
-            root["color_temp"] = _light_mireds;
-        }
-    }
+void _SubscribeToID(const char * topic) {
+    char buffer[strlen(topic) + 3];
+    snprintf_P(buffer, sizeof(buffer), PSTR("%s/+"), topic);
+    mqttSubscribe(buffer);
 }
 
 void _lightMQTTCallback(unsigned int type, const char * topic, const char * payload) {
@@ -508,28 +500,20 @@ void _lightMQTTCallback(unsigned int type, const char * topic, const char * payl
 
     if (type == MQTT_CONNECT_EVENT) {
 
+      // Group color
+      if (mqtt_group_color.length() > 0) mqttSubscribeRaw(mqtt_group_color.c_str());
+
         if (_light_has_color) {
-            mqttSubscribe(MQTT_TOPIC_BRIGHTNESS);
-            mqttSubscribe(MQTT_TOPIC_MIRED);
-            mqttSubscribe(MQTT_TOPIC_KELVIN);
-            mqttSubscribe(MQTT_TOPIC_COLOR_RGB);
-            mqttSubscribe(MQTT_TOPIC_COLOR_HSV);
+            _SubscribeToID(MQTT_TOPIC_BRIGHTNESS);
+            _SubscribeToID(MQTT_TOPIC_MIRED);
+            _SubscribeToID(MQTT_TOPIC_KELVIN);
+            _SubscribeToID(MQTT_TOPIC_COLOR_RGB);
+            _SubscribeToID(MQTT_TOPIC_COLOR_HSV);
         }
 
-        // Group color
-        if (mqtt_group_color.length() > 0) mqttSubscribeRaw(mqtt_group_color.c_str());
-
-        // Channels
-        char ChannelsBuffer[strlen(MQTT_TOPIC_CHANNEL) + 3];
-        snprintf_P(ChannelsBuffer, sizeof(ChannelsBuffer), PSTR("%s/+"), MQTT_TOPIC_CHANNEL);
-        mqttSubscribe(ChannelsBuffer);
-
-        // MQTT JSON
-        // Not needed? Subscription already happend in relay.ino
-        // char JSONBuffer[strlen(MQTT_TOPIC_JSON) + 3];
-        // snprintf_P(JSONBuffer, sizeof(JSONBuffer), PSTR("%s/+"), MQTT_TOPIC_JSON);
-        // mqttSubscribe(JSONBuffer);
-
+        _SubscribeToID(MQTT_TOPIC_SWITCH);
+        _SubscribeToID(MQTT_TOPIC_JSON);
+        _SubscribeToID(MQTT_TOPIC_CHANNEL);
     }
 
     if (type == MQTT_MESSAGE_EVENT) {
@@ -544,11 +528,26 @@ void _lightMQTTCallback(unsigned int type, const char * topic, const char * payl
         // Match topic
         String t = mqttMagnitude((char *) topic);
 
+
+        // Switch
+        if (t.startsWith(MQTT_TOPIC_SWITCH)) {
+            unsigned int switchID = t.substring(strlen(MQTT_TOPIC_SWITCH)).toInt();
+            // Currently only supporting a single switch!
+            if (switchID != 0) {
+                DEBUG_MSG_P(PSTR("[LIGHT] Wrong switchID (%d) - Currently only supporting a single switch! (%s)\n"), switchID, payload);
+                return;
+            }
+            lightState(atol(payload) == 1);
+            lightUpdate(true, mqttForward());
+            return;
+        }
+
         // Color, temperature in mireds and brightness
         if (t.startsWith(MQTT_TOPIC_JSON)) {
-            DEBUG_MSG_P(PSTR("[MQTT-JSON] Got it! (%s)\n"), payload);
             StaticJsonBuffer<200> jsonBuffer;
             JsonObject& root = jsonBuffer.parseObject(payload);
+
+            lightState(root["state"] == "ON");
 
             if (root["brightness"]) {
                 _light_brightness = constrain(root["brightness"], 0, LIGHT_MAX_BRIGHTNESS);
@@ -561,41 +560,38 @@ void _lightMQTTCallback(unsigned int type, const char * topic, const char * payl
                 _fromMireds(root["color_temp"]);
             }
 
-            if (root["color"] || root["brightness"] || root["color_temp"]) {
-                lightUpdate(true, mqttForward());
-            }
-
+            lightUpdate(true, mqttForward());
             return;
         }
 
         // Color temperature in mireds
-        if (t.equals(MQTT_TOPIC_MIRED)) {
+        if (t.startsWith(MQTT_TOPIC_MIRED)) {
             _fromMireds(atol(payload));
             lightUpdate(true, mqttForward());
             return;
         }
 
         // Color temperature in kelvins
-        if (t.equals(MQTT_TOPIC_KELVIN)) {
+        if (t.startsWith(MQTT_TOPIC_KELVIN)) {
             _fromKelvin(atol(payload));
             lightUpdate(true, mqttForward());
             return;
         }
 
         // Color
-        if (t.equals(MQTT_TOPIC_COLOR_RGB)) {
+        if (t.startsWith(MQTT_TOPIC_COLOR_RGB)) {
             lightColor(payload, true);
             lightUpdate(true, mqttForward());
             return;
         }
-        if (t.equals(MQTT_TOPIC_COLOR_HSV)) {
+        if (t.startsWith(MQTT_TOPIC_COLOR_HSV)) {
             lightColor(payload, false);
             lightUpdate(true, mqttForward());
             return;
         }
 
         // Brightness
-        if (t.equals(MQTT_TOPIC_BRIGHTNESS)) {
+        if (t.startsWith(MQTT_TOPIC_BRIGHTNESS)) {
             _light_brightness = constrain(atoi(payload), 0, LIGHT_MAX_BRIGHTNESS);
             lightUpdate(true, mqttForward());
             return;
@@ -628,19 +624,46 @@ void lightMQTT() {
         } else {
             _toLong(buffer, sizeof(buffer));
         }
-        mqttSend(MQTT_TOPIC_COLOR_RGB, buffer);
+        mqttSend(MQTT_TOPIC_COLOR_RGB, 0, buffer);
 
         _toHSV(buffer, sizeof(buffer));
-        mqttSend(MQTT_TOPIC_COLOR_HSV, buffer);
+        mqttSend(MQTT_TOPIC_COLOR_HSV, 0, buffer);
 
         // Brightness
         snprintf_P(buffer, sizeof(buffer), PSTR("%d"), _light_brightness);
-        mqttSend(MQTT_TOPIC_BRIGHTNESS, buffer);
+        mqttSend(MQTT_TOPIC_BRIGHTNESS, 0, buffer);
 
         // Mireds
         snprintf_P(buffer, sizeof(buffer), PSTR("%d"), _light_mireds);
-        mqttSend(MQTT_TOPIC_MIRED, buffer);
+        mqttSend(MQTT_TOPIC_MIRED, 0, buffer);
     }
+
+    // MQTT_JSON
+    StaticJsonBuffer<200> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+
+    root["state"] = _light_state ? "ON" : "OFF";
+    root["brightness"] = _light_brightness;
+
+    if (_light_has_color) {
+        JsonObject& color = root.createNestedObject("color");
+        color["r"] = _light_channel[0].inputValue;
+        color["g"] = _light_channel[1].inputValue;
+        color["b"] = _light_channel[2].inputValue;
+
+        if (_light_use_cct) {
+            root["color_temp"] = _light_mireds;
+        }
+    }
+
+    String payload;
+    root.printTo(payload);
+    mqttSend(MQTT_TOPIC_JSON, 0, payload.c_str());
+
+
+    // Switch
+    snprintf_P(buffer, sizeof(buffer), PSTR("%d"), _light_state ? 1 : 0);
+    mqttSend(MQTT_TOPIC_SWITCH, 0, buffer);
 
     // Channels
     for (unsigned int i=0; i < _light_channel.size(); i++) {

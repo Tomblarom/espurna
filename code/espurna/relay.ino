@@ -88,6 +88,13 @@ void _relayProviderStatus(unsigned char id, bool status) {
 
     #if RELAY_PROVIDER == RELAY_PROVIDER_LIGHT
 
+        // This code has been moved to light.ino
+        // Known Issue: It should not respond to the `relay/0/set` commands
+        // when there is no real relay. Nothing happen but the device return
+        // that the relay is "on" which is NOT the case since we don't have
+        // any relays (only lights...)
+        //
+
         // If the number of relays matches the number of light channels
         // assume each relay controls one channel.
         // If the number of relays is the number of channels plus 1
@@ -96,20 +103,20 @@ void _relayProviderStatus(unsigned char id, bool status) {
         // Otherwise every relay controls all channels.
         // TODO: this won't work with a mixed of dummy and real relays
         // but this option is not allowed atm (YANGNI)
-        if (_relays.size() == lightChannels()) {
-            lightState(id, status);
-            lightState(true);
-        } else if (_relays.size() == lightChannels() + 1) {
-            if (id == 0) {
-                lightState(status);
-            } else {
-                lightState(id-1, status);
-            }
-        } else {
-            lightState(status);
-        }
-
-        lightUpdate(true, true);
+        // if (_relays.size() == lightChannels()) {
+        //     lightState(id, status);
+        //     lightState(true);
+        // } else if (_relays.size() == lightChannels() + 1) {
+        //     if (id == 0) {
+        //         lightState(status);
+        //     } else {
+        //         lightState(id-1, status);
+        //     }
+        // } else {
+        //     lightState(status);
+        // }
+        //
+        // lightUpdate(true, true);
 
     #endif
 
@@ -636,19 +643,6 @@ void relaySetupAPI() {
 
 #if MQTT_SUPPORT
 
-String getJsonState(unsigned char id) {
-    StaticJsonBuffer<200> jsonBuffer;
-    JsonObject& root = jsonBuffer.createObject();
-    root["state"] = _relays[id].current_status ? "ON" : "OFF";
-
-    _lighMQTTJSONState(root);
-
-    String pl;
-    root.printTo(pl);
-
-    return pl;
-}
-
 void relayMQTT(unsigned char id) {
 
     if (id >= _relays.size()) return;
@@ -657,7 +651,6 @@ void relayMQTT(unsigned char id) {
     if (_relays[id].report) {
         _relays[id].report = false;
         mqttSend(MQTT_TOPIC_RELAY, id, _relays[id].current_status ? "1" : "0");
-        mqttSend(MQTT_TOPIC_JSON, id, getJsonState(id).c_str());
     }
 
     // Check group topic
@@ -675,7 +668,6 @@ void relayMQTT(unsigned char id) {
 void relayMQTT() {
     for (unsigned int id=0; id < _relays.size(); id++) {
         mqttSend(MQTT_TOPIC_RELAY, id, _relays[id].current_status ? "1" : "0");
-        mqttSend(MQTT_TOPIC_JSON, id, getJsonState(id).c_str());
     }
 }
 

@@ -655,6 +655,7 @@
 #define MQTT_TOPIC_DATA             "data"
 #define MQTT_TOPIC_ACTION           "action"
 #define MQTT_TOPIC_RELAY            "relay"
+#define MQTT_TOPIC_SWITCH           "switch"
 #define MQTT_TOPIC_LED              "led"
 #define MQTT_TOPIC_BUTTON           "button"
 #define MQTT_TOPIC_IP               "ip"
