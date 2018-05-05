@@ -534,10 +534,16 @@ void _lightMQTTCallback(unsigned int type, const char * topic, const char * payl
             unsigned int switchID = t.substring(strlen(MQTT_TOPIC_SWITCH)).toInt();
             // Currently only supporting a single switch!
             if (switchID != 0) {
-                DEBUG_MSG_P(PSTR("[LIGHT] Wrong switchID (%d) - Currently only supporting a single switch! (%s)\n"), switchID, payload);
+                DEBUG_MSG_P(PSTR("[LIGHT] Wrong switchID (%d) - Currently only supporting a single switch!\n"), switchID);
                 return;
             }
-            lightState(atol(payload) == 1);
+            // Toggle light
+            if (atol(payload) == 2) {
+              _light_state = !_light_state;
+            } else { //ON & OFF
+              _light_state = atol(payload) == 1;
+            }
+
             lightUpdate(true, mqttForward());
             return;
         }
@@ -549,14 +555,14 @@ void _lightMQTTCallback(unsigned int type, const char * topic, const char * payl
 
             lightState(root["state"] == "ON");
 
-            if (root["brightness"]) {
+            if (data.containsKey("brightness")) {
                 _light_brightness = constrain(root["brightness"], 0, LIGHT_MAX_BRIGHTNESS);
             }
 
-            if (root["color"]) {
+            if (data.containsKey("color")) {
                 //TODO: Validate if r, g, b exist?
                 _setRGBInputValue(root["color"]["r"], root["color"]["g"], root["color"]["b"]);
-            } else if (root["color_temp"]) {
+            } else if (data.containsKey("color_temp")) {
                 _fromMireds(root["color_temp"]);
             }
 
