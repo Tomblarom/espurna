@@ -426,12 +426,9 @@ void _lightProviderUpdate() {
     unsigned char target;
     for (unsigned int i=0; i < _light_channel.size(); i++) {
         target = _light_state ? _light_channel[i].value : 0;
-        if (_light_steps_left == 0) {
-            _light_channel[i].current = target;
-        } else {
-            double difference = (double) (target - _light_channel[i].current) / (_light_steps_left + 1);
-            _light_channel[i].current = _light_channel[i].current + difference;
-        }
+        double difference = (double) (target - _light_channel[i].current) / (_light_steps_left + 1);
+        
+        _light_channel[i].current = _light_channel[i].current + difference;
         _light_channel[i].shadow = _light_channel[i].current;
     }
 
